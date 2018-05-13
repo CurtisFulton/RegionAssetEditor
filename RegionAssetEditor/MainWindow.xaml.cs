@@ -23,6 +23,11 @@ namespace RegionAssetEditor
         public MainWindow()
         {
             InitializeComponent();
+
+            HierarchyViewModel viewModel = new HierarchyViewModel();
+            DataContext = viewModel;
+            
+            Closing += (sender, e) => viewModel.SaveChanges();
         }
     }
 }

@@ -54,8 +54,11 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Commands\RelayCommand.cs" />
+    <Compile Include="Model\AssetModel.cs" />
     <Compile Include="ViewModel\BaseViewModel.cs" />
     <Compile Include="ViewModel\HierarchyNodeViewModel.cs" />
+    <Compile Include="ViewModel\HierarchyViewModel.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -96,18 +99,21 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Services.Client">
+      <Version>5.8.3</Version>
+    </PackageReference>
     <PackageReference Include="PropertyChanged.Fody">
       <Version>2.5.6</Version>
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\MEX OData API\trunk\MEXODataAPI\MEXODataAPI.csproj">
-      <Project>{bb5ae988-26c8-4fb0-8153-4b1998827bce}</Project>
-      <Name>MEXODataAPI</Name>
-    </ProjectReference>
+    <Folder Include="View\" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="View\" />
+    <ProjectReference Include="..\MEXAPI\MEXAPI.csproj">
+      <Project>{6fe1e8cc-01c9-4ee9-8214-e239962e0474}</Project>
+      <Name>MEXAPI</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

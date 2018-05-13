@@ -8,7 +8,7 @@ namespace RegionAssetEditor
         /// <summary>
         /// Property Changed Event. This should never need to be manually called
         /// </summary>
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler PropertyChanged = (sender, e) => { } ;
 
         /// <summary>
         /// Helper function to force update a property
