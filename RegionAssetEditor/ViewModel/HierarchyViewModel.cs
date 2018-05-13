@@ -55,14 +55,10 @@ namespace RegionAssetEditor
             query = Regex.Replace(query, @"\s+", " ").Trim();
             
             AllAssets = DataToken.DynamicQuery<AssetModel>(query);
-            Level1Nodes = new ObservableCollection<HierarchyNodeViewModel>();
 
             // Get only the level 1 assets from this list
             List<AssetModel> level1Assets = AllAssets.Where(a => a.ParentAssetID == 0 && a.AssetNumber != "MEX Inspections").ToList();
-
-            foreach (var asset in level1Assets) {
-                Level1Nodes.Add(GetNodeFromAsset(asset));
-            }
+            Level1Nodes = new ObservableCollection<HierarchyNodeViewModel>(level1Assets.Select(a => GetNodeFromAsset(a)));
         }
 
         /// <summary>
@@ -110,8 +106,12 @@ namespace RegionAssetEditor
             }
         }
         
+        /// <summary>
+        /// Saves all changes currently made
+        /// </summary>
         public void SaveChanges()
         {
+            // If there are no assets loaded, there is no changes to save
             if (AllAssets == null) {
                 return;
             }
@@ -122,16 +122,22 @@ namespace RegionAssetEditor
 
             // Get all the dirty nodes and save changes for each node
             List<HierarchyNodeViewModel> dirtyNodes = allNodes.Where(node => node.IsDirty).ToList();
-            dirtyNodes.ForEach(n => SaveNodeChanges(n));
+            dirtyNodes.ForEach(n => StoreNodeChanges(n));
 
             // Load new region data in
             AllRegionAssets = GetRegionData(_currentRegionID);
             allNodes.ForEach(n => LoadRegionDataIntoNode(n));
 
-            DataToken.SaveChanges();
+            // If there were no dirty nodes, we saved no data
+            if (dirtyNodes.Count > 0)
+                DataToken.SaveChanges();
         }
 
-        private void SaveNodeChanges(HierarchyNodeViewModel node)
+        /// <summary>
+        /// Stores the changes on the specified node (Does not send the save request)
+        /// </summary>
+        /// <param name="node">Node to store the changes of</param>
+        private void StoreNodeChanges(HierarchyNodeViewModel node)
         {
             if (node.IsChecked) {
                 // Create a RegionAsset object and add to datatoken
@@ -144,8 +150,13 @@ namespace RegionAssetEditor
             }
         }
 
+        /// <summary>
+        /// Loads the region data into this node. Does checks on the parent to see if it should override its default value
+        /// </summary>
+        /// <param name="node">Node to load the data into</param>
         private void LoadRegionDataIntoNode(HierarchyNodeViewModel node)
         {
+            // If there is no RegionAsset data, we have nothing to load in
             if (AllRegionAssets == null)
                 return;
             
@@ -156,10 +167,9 @@ namespace RegionAssetEditor
             } else {
                 // Check the region data to see if this one should be checked or not
                 node.IsChecked = AllRegionAssets.FirstOrDefault(ra => ra.AssetID == node.NodeID) != null;
+                node.IsDirty = false;
             }
         }
-
-
 
         /// <summary>
         /// Gets the node corrisponding to the node. Creates the node if it doesn't already exist.
@@ -172,13 +182,16 @@ namespace RegionAssetEditor
             if (!AssetToNode.ContainsKey(asset.AssetID)) {
                 HierarchyNodeViewModel newNode = new HierarchyNodeViewModel();
 
+                // Check to see if there are any children that could be loaded
                 bool hasChildren = AllAssets.FirstOrDefault(a => a.ParentAssetID == asset.AssetID) != null;
+                // If there are children, we need to add a dummy collection with 1 empty value so we get the expand arrow
                 if (hasChildren)
                     newNode.DisplayChildren = new ObservableCollection<HierarchyNodeViewModel>() { null };
 
                 newNode.NodeText = asset.AssetNumber;
                 newNode.NodeID = asset.AssetID;
                 
+                // If this node has a parent, get it and assign it
                 if (asset.ParentAssetID != 0) {
                     AssetModel parentAsset = AllAssets.FirstOrDefault(a => a.AssetID == asset.ParentAssetID);
                     HierarchyNodeViewModel parentNode = GetNodeFromAsset(parentAsset);
@@ -186,6 +199,7 @@ namespace RegionAssetEditor
                     newNode.Parent = parentNode;
                 }
 
+                // Load this nodes region data
                 LoadRegionDataIntoNode(newNode);
 
                 // Add the event listener

@@ -60,6 +60,9 @@ namespace RegionAssetEditor
         /// </summary>
         public bool HasChildren { get; set; }
 
+        /// <summary>
+        /// If the node is currently checked or not
+        /// </summary>
         public bool IsChecked {
             get => _isChecked;
             set {
@@ -103,12 +106,11 @@ namespace RegionAssetEditor
 
         #region Events
 
+        /// <summary>
+        /// Event that fires after the node has been expanded or collapsed
+        /// </summary>
         public event Action<HierarchyNodeViewModel> OnExpandChanged;
 
         #endregion
-
-        public HierarchyNodeViewModel()
-        {
-        }
     }
 }
