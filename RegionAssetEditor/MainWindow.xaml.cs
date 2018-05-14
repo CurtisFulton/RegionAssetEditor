@@ -24,10 +24,10 @@ namespace RegionAssetEditor
         {
             InitializeComponent();
 
-            HierarchyViewModel viewModel = new HierarchyViewModel();
+            MainPageViewModel viewModel = new MainPageViewModel();
             DataContext = viewModel;
             
-            Closing += (sender, e) => viewModel.SaveChanges();
+            Closing += (sender, e) => viewModel.AssetHierarchy.SaveChanges();
         }
     }
 }

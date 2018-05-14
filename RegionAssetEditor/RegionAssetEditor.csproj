@@ -56,9 +56,12 @@
     </ApplicationDefinition>
     <Compile Include="Commands\RelayCommand.cs" />
     <Compile Include="Model\AssetModel.cs" />
+    <Compile Include="Model\RegionAssetModel.cs" />
     <Compile Include="ViewModel\BaseViewModel.cs" />
     <Compile Include="ViewModel\HierarchyNodeViewModel.cs" />
     <Compile Include="ViewModel\HierarchyViewModel.cs" />
+    <Compile Include="ViewModel\MainPageViewModel.cs" />
+    <Compile Include="ViewModel\RegionListViewModel.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

@@ -15,29 +15,33 @@ namespace RegionAssetEditor
         private List<AssetModel> AllAssets { get; set; }
         private Dictionary<int, HierarchyNodeViewModel> AssetToNode { get; set; } = new Dictionary<int, HierarchyNodeViewModel>();
 
-        private List<RegionAsset> AllRegionAssets { get; set; }
+        private List<RegionAssetModel> AllRegionAssets { get; set; }
 
         private int _currentRegionID;
-        private int CurrentRegionID {
+        public int CurrentRegionID {
             get => _currentRegionID;
             set {
                 if (_currentRegionID == value)
                     return;
 
-                _currentRegionID = value;
                 SaveChanges();
+                _currentRegionID = value;
+                // Load new region data in
+                List<HierarchyNodeViewModel> allNodes = AllAssets.Where(a => AssetToNode.ContainsKey(a.AssetID))
+                                                 .Select(a => AssetToNode[a.AssetID]).ToList();
+
+                AllRegionAssets = GetRegionData(_currentRegionID);
+                allNodes.ForEach(n => LoadRegionDataIntoNode(n));
             }
         }
         
         public ObservableCollection<HierarchyNodeViewModel> Level1Nodes { get; set; }
         
-        public HierarchyViewModel()
+        public HierarchyViewModel(DataToken dataToken)
         {
-            DataToken = new DataToken(new Uri("http://trial.mex.com.au/MEXTrial/odata.svc"));
+            DataToken = dataToken;
 
             SetupHierarchy();
-            CurrentRegionID = 2;
-            CurrentRegionID = 3;
         }
 
         /// <summary>
@@ -53,11 +57,11 @@ namespace RegionAssetEditor
                 ORDER BY AssetNumber
             ";
             query = Regex.Replace(query, @"\s+", " ").Trim();
-            
-            AllAssets = DataToken.DynamicQuery<AssetModel>(query);
 
+            AllAssets = DataToken.DynamicQuery<AssetModel>(query);
+            
             // Get only the level 1 assets from this list
-            List<AssetModel> level1Assets = AllAssets.Where(a => a.ParentAssetID == 0 && a.AssetNumber != "MEX Inspections").ToList();
+            List<AssetModel> level1Assets = AllAssets.Where(a => a.ParentAssetID == 0 && a.AssetNumber != "Mex Inspections").ToList();
             Level1Nodes = new ObservableCollection<HierarchyNodeViewModel>(level1Assets.Select(a => GetNodeFromAsset(a)));
         }
 
@@ -66,10 +70,16 @@ namespace RegionAssetEditor
         /// </summary>
         /// <param name="regionID">Region ID to load</param>
         /// <returns>The Region Asset Data as a list</returns>
-        private List<RegionAsset> GetRegionData(int regionID)
+        private List<RegionAssetModel> GetRegionData(int regionID)
         {
-            // Might not be needed, but in case I want to add some logic to this.
-            return DataToken.RegionAssets.Where(ra => ra.RegionID == regionID).ToList();
+            string query = @"
+                SELECT AssetID
+                FROM RegionAsset
+                WHERE RegionID = " + CurrentRegionID;
+
+            query = Regex.Replace(query, @"\s+", " ").Trim();
+
+            return DataToken.DynamicQuery<RegionAssetModel>(query);
         }
 
         /// <summary>
@@ -115,39 +125,80 @@ namespace RegionAssetEditor
             if (AllAssets == null) {
                 return;
             }
-
+            
             // Get all nodes currently loaded
             List<HierarchyNodeViewModel> allNodes = AllAssets.Where(a => AssetToNode.ContainsKey(a.AssetID))
                                                              .Select(a => AssetToNode[a.AssetID]).ToList();
 
             // Get all the dirty nodes and save changes for each node
             List<HierarchyNodeViewModel> dirtyNodes = allNodes.Where(node => node.IsDirty).ToList();
-            dirtyNodes.ForEach(n => StoreNodeChanges(n));
 
-            // Load new region data in
-            AllRegionAssets = GetRegionData(_currentRegionID);
-            allNodes.ForEach(n => LoadRegionDataIntoNode(n));
+            HashSet<HierarchyNodeViewModel> addedNodes = new HashSet<HierarchyNodeViewModel>();
+            HashSet<int> regionAssetsToDelete = new HashSet<int>();
+
+            dirtyNodes.ForEach(n => {
+                // Create a RegionAsset object and add to datatoken
+                if (n.IsChecked) {
+                    // Recursive function, need to make sure all of this node are added
+                    void AddNodeRegionAsset(HierarchyNodeViewModel node)
+                    {
+                        if (addedNodes.Contains(node))
+                            return;
+
+                        // Add this to the 
+                        RegionAsset newRegionAsset = RegionAsset.CreateRegionAsset(0, CurrentRegionID, node.NodeID, -1, DateTime.Now, -1, DateTime.Now);
+                        DataToken.AddToRegionAssets(newRegionAsset);
+                        addedNodes.Add(node);
+
+                        bool previousExpandState = node.IsExpanded;
+                        node.IsExpanded = true;
+                        
+                        foreach (var childNode in node.AllChildren) {
+                            if (childNode.IsChecked)
+                                AddNodeRegionAsset(childNode);
+                        }
+
+                        node.IsExpanded = previousExpandState;
+                    }
+
+                    // Recursively add all children
+                    AddNodeRegionAsset(n);
+                } else {
+                    // Recursive Function, need to make sure that all the children are removed
+                    void RemoveNodeFromRegionAsset(HierarchyNodeViewModel node)
+                    {
+                        RegionAssetModel regionAsset = AllRegionAssets.FirstOrDefault(ra => ra.AssetID == node.NodeID);
+
+                        if (regionAsset != null && !regionAssetsToDelete.Contains(node.NodeID))
+                            regionAssetsToDelete.Add(regionAsset.AssetID);
+
+                        List<AssetModel> childrenAssets = AllAssets.Where(a => a.ParentAssetID == node.NodeID).ToList();
+                        foreach (var child in childrenAssets) {
+                            HierarchyNodeViewModel childNode = GetNodeFromAsset(child);
+
+                            if ((childNode.IsDirty && !childNode.IsChecked) || (!childNode.IsDirty && childNode.IsChecked))
+                                RemoveNodeFromRegionAsset(childNode);
+                        }
+                    }
+
+                    RemoveNodeFromRegionAsset(n);
+                }
+            });
+            
+            if (regionAssetsToDelete.Count > 0) {
+                var test = string.Join(",", regionAssetsToDelete);
+
+                string deleteQuery = @"
+                DELETE FROM RegionAsset
+                WHERE RegionID =" + CurrentRegionID + " AND AssetID IN (" + string.Join(",", regionAssetsToDelete) + ")";
+                deleteQuery = Regex.Replace(deleteQuery, @"\s+", " ").Trim();
+
+                DataToken.DynamicQuery<object>(deleteQuery);
+            }
 
             // If there were no dirty nodes, we saved no data
             if (dirtyNodes.Count > 0)
                 DataToken.SaveChanges();
-        }
-
-        /// <summary>
-        /// Stores the changes on the specified node (Does not send the save request)
-        /// </summary>
-        /// <param name="node">Node to store the changes of</param>
-        private void StoreNodeChanges(HierarchyNodeViewModel node)
-        {
-            if (node.IsChecked) {
-                // Create a RegionAsset object and add to datatoken
-                RegionAsset newRegionAsset = RegionAsset.CreateRegionAsset(0, CurrentRegionID, node.NodeID, -1, DateTime.Now, -1, DateTime.Now);
-                DataToken.AddToRegionAssets(newRegionAsset);
-            } else {
-                // Remove the existing regionAsset 
-                RegionAsset regionAsset = AllRegionAssets.FirstOrDefault(ra => ra.AssetID == node.NodeID);
-                DataToken.DeleteObject(regionAsset);
-            }
         }
 
         /// <summary>
@@ -159,14 +210,18 @@ namespace RegionAssetEditor
             // If there is no RegionAsset data, we have nothing to load in
             if (AllRegionAssets == null)
                 return;
-            
-            // Check to see if the parent is disabled. If it is, we need to make sure this node is disabled too
-            if (node.Parent != null && !node.Parent.IsChecked) {
-                node.IsChecked = false;
-                node.IsDirty = true;
+
+            bool hasRegionAsset = AllRegionAssets.FirstOrDefault(ra => ra.AssetID == node.NodeID) != null;
+
+            // If the parent is dirty, we want to update this node to be the same value. 
+            if (node.Parent != null && node.Parent.IsDirty) {
+                node.IsChecked = node.Parent.IsChecked;
+                
+                // If this node is a different value from what it was, it is dirty
+                node.IsDirty = node.IsChecked ? !hasRegionAsset : hasRegionAsset;
             } else {
                 // Check the region data to see if this one should be checked or not
-                node.IsChecked = AllRegionAssets.FirstOrDefault(ra => ra.AssetID == node.NodeID) != null;
+                node.IsChecked = hasRegionAsset;
                 node.IsDirty = false;
             }
         }

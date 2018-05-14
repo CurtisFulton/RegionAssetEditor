@@ -21,6 +21,13 @@ namespace MEXModel
 
                 e.Headers.Add("Authorization", $"Basic {auth}");
             };
+
+            try {
+                // Check that we can query without any errors
+                this.Assets.FirstOrDefault();
+            } catch (DataServiceQueryException e) {
+                CheckException(e);
+            }
         }
         
         private void DataToken_ReadingEntity(object sender, System.Data.Services.Client.ReadingWritingEntityEventArgs e)
@@ -42,12 +49,19 @@ namespace MEXModel
 
             try {
                 results = JsonConvert.DeserializeObject<List<T>>(dapperQuery.Execute().FirstOrDefault());
-            } catch (Exception e) {
-                Console.WriteLine(e);
+            } catch (DataServiceQueryException e) {
+                CheckException(e);
             }
 
             return results;
+        }
 
+        private bool CheckException(DataServiceQueryException e)
+        {
+            if (e.Response.StatusCode == 401)
+                throw new DataServiceRequestException("The login details you used are incorrect");
+
+            return true;
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace RegionAssetEditor
 {
@@ -79,9 +80,19 @@ namespace RegionAssetEditor
 
                 // For now we only change the children if this node is being set to false. 
                 // I will decide what I want to do with it being set to true in the future.
-                if (AllChildren != null && !_isChecked) {
-                    foreach (var child in AllChildren) {
-                        child.IsChecked = false;
+                if (AllChildren != null) {
+                    if (IsChecked) {
+                        bool allChildrenUnchecked = AllChildren.All(child => !child.IsChecked);
+
+                        if (allChildrenUnchecked) {
+                            foreach (var child in AllChildren) {
+                                child.IsChecked = true;
+                            }
+                        }
+                    } else {
+                        foreach (var child in AllChildren) {
+                            child.IsChecked = false;
+                        }
                     }
                 }
             }
