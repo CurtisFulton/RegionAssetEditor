@@ -59,8 +59,7 @@ namespace RegionAssetEditor
                 ORDER BY AssetNumber
             ";
             query = Regex.Replace(query, @"\s+", " ").Trim();
-
-            var test = DataToken.DynamicQuery<AssetModel>(query);
+            
             AllAssets = DataToken.DynamicQuery<AssetModel>(query);
 
             // Get only the level 1 assets from this list
@@ -196,7 +195,8 @@ namespace RegionAssetEditor
                 WHERE RegionID =" + CurrentRegionID + " AND AssetID IN (" + string.Join(",", regionAssetsToDelete) + ")";
                 deleteQuery = Regex.Replace(deleteQuery, @"\s+", " ").Trim();
 
-                DataToken.DynamicQuery<object>(deleteQuery);
+                // This is Async, and because we don't await it the program will continue. This will increase loading when switching regions
+                var response = DataToken.DynamicQueryAsync(deleteQuery);
             }
 
             // If there were no dirty nodes, we saved no data

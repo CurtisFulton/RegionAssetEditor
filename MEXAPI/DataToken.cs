@@ -5,6 +5,7 @@ using System.Data.Services.Client;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
@@ -22,10 +23,15 @@ namespace MEXModel
         {
             BaseURL = GetBaseMEXUrl(serviceRoot);
 
-            this.ReadingEntity += DataToken_ReadingEntity;
+            this.ReadingEntity += (sender, e) => {
+                var entity = (e.Entity as INotifyPropertyChanged);
+                entity.PropertyChanged += (s, e2) => this.UpdateObject(s);
+            };
+
             string auth = Convert.ToBase64String(
                 Encoding.UTF8.GetBytes($"{username}:{password}")
             );
+
             this.BuildingRequest += (sender, e) => e.Headers.Add("Authorization", $"Basic {auth}");
 
             // Create a HTTP client
@@ -67,16 +73,26 @@ namespace MEXModel
                 // Check that we can query without any errors
                 this.Assets.FirstOrDefault();
             } catch (DataServiceQueryException e) {
-                CheckException(e);
+                ThrowException(e);
             }
         }
-        
-        private void DataToken_ReadingEntity(object sender, System.Data.Services.Client.ReadingWritingEntityEventArgs e)
-        {
-            var entity = (e.Entity as INotifyPropertyChanged);
-            entity.PropertyChanged += (s, e2) => this.UpdateObject(s);
-        }
 
+        /// <summary>
+        /// Helper method for writing Dapper Queries. This will allow you to send custom queries and return custom data.
+        /// </summary>
+        /// <param name="query">SQL Query</param>
+        /// <returns>The response of the query</returns>
+        public HttpResponseMessage DynamicQuery(string query)
+        {
+            StringContent httpContent = CreateHttpStringContent(query);
+
+            try {
+                return HttpClient.PostAsync($"{BaseURL}/API/DataAPI/PerformAction?ActionType=OData&ActionName=DapperQuery", httpContent).Result;
+            } catch (Exception e) {
+                ThrowException(e);
+                return null;
+            }
+        }
         /// <summary>
         /// Helper method for writing Dapper Queries. This will allow you to send custom queries and return custom data.
         /// </summary>
@@ -85,31 +101,79 @@ namespace MEXModel
         /// <returns>List of objects returned by the query</returns>
         public List<T> DynamicQuery<T>(string query)
         {
+            StringContent httpContent = CreateHttpStringContent(query);
+
+            try {
+                HttpResponseMessage response = HttpClient.PostAsync($"{BaseURL}/API/DataAPI/PerformAction?ActionType=OData&ActionName=DapperQuery", httpContent).Result;
+                string result = response.Content.ReadAsStringAsync().Result;
+                result = RemoveXMLTags(result);
+
+                return JsonConvert.DeserializeObject<List<T>>(result);
+            } catch (Exception e) {
+                ThrowException(e);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Helper method for writing Dapper Queries. This will allow you to send custom queries and return custom data.
+        /// </summary>
+        /// <param name="query">SQL Query</param>
+        /// <returns>List of objects returned by the query</returns>
+        public async Task<HttpResponseMessage> DynamicQueryAsync(string query)
+        {
+            StringContent httpContent = CreateHttpStringContent(query);
+
+            try {
+                return await HttpClient.PostAsync($"{BaseURL}/API/DataAPI/PerformAction?ActionType=OData&ActionName=DapperQuery", httpContent).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (Exception e) {
+                ThrowException(e);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Helper method for writing Dapper Queries. This will allow you to send custom queries and return custom data.
+        /// </summary>
+        /// <typeparam name="T">Type of object the query returns</typeparam>
+        /// <param name="query">SQL Query</param>
+        /// <returns>List of objects returned by the query</returns>
+        public async Task<List<T>> DynamicQueryAsync<T>(string query)
+        {
+            StringContent httpContent = CreateHttpStringContent(query);
+
+            try {
+                HttpResponseMessage response = await HttpClient.PostAsync($"{BaseURL}/API/DataAPI/PerformAction?ActionType=OData&ActionName=DapperQuery", httpContent).ConfigureAwait(continueOnCapturedContext:false);
+                string result =  await response.Content.ReadAsStringAsync();
+                result = RemoveXMLTags(result);
+
+                return (JsonConvert.DeserializeObject<List<T>>(result));
+            } catch (Exception e) {
+                ThrowException(e);
+                return null;
+            }
+        }
+
+        private StringContent CreateHttpStringContent(string query)
+        {
             // If the opening XML tag is not there, assume there is no XML tags at all and add them
             if (!query.Contains("<paramstring>"))
                 query = "<paramstring>" + query + "</paramstring>";
 
-            var httpContent = new StringContent(query, Encoding.UTF8, "application/xml");
-
-            try {
-                var response = HttpClient.PostAsync($"{BaseURL}/API/DataAPI/PerformAction?ActionType=OData&ActionName=DapperQuery", httpContent).Result;
-                var result =  response.Content.ReadAsStringAsync().Result;
-
-                return JsonConvert.DeserializeObject<List<T>>(result);
-            } catch (Exception e) {
-                if (e is DataServiceQueryException)
-                    CheckException((DataServiceQueryException)e);
-
-                throw e;
-            }
+            return new StringContent(query, Encoding.UTF8, "application/xml");
         }
 
-        private bool CheckException(DataServiceQueryException e)
-        {
-            if (e.Response.StatusCode == 401)
-                throw new DataServiceRequestException("The login details you used are incorrect");
+        public static string RemoveXMLTags(string s) => Regex.Replace(s, @"<[^>]*>", String.Empty);
 
-            return true;
+        private void ThrowException(Exception e)
+        {
+            // Holy shit that syntax is beautiful. I love C#
+            if (e is DataServiceQueryException reponseException) {
+                if (reponseException.Response.StatusCode == 401)
+                    throw new DataServiceRequestException("The login details you used are incorrect");
+            }
+
+            throw e;
         }
 
         /// <summary>
