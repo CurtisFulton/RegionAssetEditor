@@ -3,25 +3,66 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.Services.Client;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 
 namespace MEXModel
 {
     public class DataToken : MEXEntities
     {
-        public DataToken(Uri serviceRoot, string username = "admin", string password = "admin") : base(serviceRoot)
+        public HttpClient HttpClient { get; private set; }
+        public string BaseURL { get; private set; }
+
+        public DataToken(Uri serviceRoot, string username = "admin", string password = "admin")
+            : this (serviceRoot.OriginalString, username, password) { }
+
+        public DataToken(string serviceRoot, string username = "admin", string password = "admin") : base(new Uri(GetBaseMEXUrl(serviceRoot) + "/OData.svc"))
         {
+            BaseURL = GetBaseMEXUrl(serviceRoot);
+
             this.ReadingEntity += DataToken_ReadingEntity;
+            string auth = Convert.ToBase64String(
+                Encoding.UTF8.GetBytes($"{username}:{password}")
+            );
+            this.BuildingRequest += (sender, e) => e.Headers.Add("Authorization", $"Basic {auth}");
 
-            this.BuildingRequest += (sender, e) => {
-                string auth = Convert.ToBase64String(
-                    Encoding.UTF8.GetBytes($"{username}:{password}")
-                    );
+            // Create a HTTP client
+            HttpClient = new HttpClient();
+            HttpClient.DefaultRequestHeaders.Add("Authorization", $"Basic {auth}");
 
-                e.Headers.Add("Authorization", $"Basic {auth}");
-            };
+            TestConnection();
+        }
 
+        private static string GetBaseMEXUrl(string path)
+        {
+            int firstForwardSlash = NthIndexOf(path, '/', 3);
+
+            int secondForwardSlash = path.IndexOf('/', firstForwardSlash + 1);
+
+            if (secondForwardSlash != -1)
+                path = path.Substring(0, secondForwardSlash);
+
+            return path;
+        }
+
+        private static int NthIndexOf(string word, char character, int n)
+        {
+            int count = 0;
+            for (int i = 0; i < word.Length; i++) {
+                if (word[i] == character) {
+                    count++;
+                    if (count == n) {
+                        return i;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        private void TestConnection()
+        {
             try {
                 // Check that we can query without any errors
                 this.Assets.FirstOrDefault();
@@ -37,23 +78,30 @@ namespace MEXModel
         }
 
         /// <summary>
-        /// Helper method for writing Dapper Queries. 
+        /// Helper method for writing Dapper Queries. This will allow you to send custom queries and return custom data.
         /// </summary>
         /// <typeparam name="T">Type of object the query returns</typeparam>
         /// <param name="query">SQL Query</param>
         /// <returns>List of objects returned by the query</returns>
         public List<T> DynamicQuery<T>(string query)
         {
-            DataServiceQuery<string> dapperQuery = this.CreateQuery<string>("DapperQuery").AddQueryOption("sql", ValidateDapperQuery(query));
-            List<T> results = null;
+            // If the opening XML tag is not there, assume there is no XML tags at all and add them
+            if (!query.Contains("<paramstring>"))
+                query = "<paramstring>" + query + "</paramstring>";
+
+            var httpContent = new StringContent(query, Encoding.UTF8, "application/xml");
 
             try {
-                results = JsonConvert.DeserializeObject<List<T>>(dapperQuery.Execute().FirstOrDefault());
-            } catch (DataServiceQueryException e) {
-                CheckException(e);
-            }
+                var response = HttpClient.PostAsync($"{BaseURL}/API/DataAPI/PerformAction?ActionType=OData&ActionName=DapperQuery", httpContent).Result;
+                var result =  response.Content.ReadAsStringAsync().Result;
 
-            return results;
+                return JsonConvert.DeserializeObject<List<T>>(result);
+            } catch (Exception e) {
+                if (e is DataServiceQueryException)
+                    CheckException((DataServiceQueryException)e);
+
+                throw e;
+            }
         }
 
         private bool CheckException(DataServiceQueryException e)

@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Net.Http;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
 
@@ -58,8 +60,9 @@ namespace RegionAssetEditor
             ";
             query = Regex.Replace(query, @"\s+", " ").Trim();
 
+            var test = DataToken.DynamicQuery<AssetModel>(query);
             AllAssets = DataToken.DynamicQuery<AssetModel>(query);
-            
+
             // Get only the level 1 assets from this list
             List<AssetModel> level1Assets = AllAssets.Where(a => a.ParentAssetID == 0 && a.AssetNumber != "Mex Inspections").ToList();
             Level1Nodes = new ObservableCollection<HierarchyNodeViewModel>(level1Assets.Select(a => GetNodeFromAsset(a)));
@@ -78,7 +81,7 @@ namespace RegionAssetEditor
                 WHERE RegionID = " + CurrentRegionID;
 
             query = Regex.Replace(query, @"\s+", " ").Trim();
-
+            
             return DataToken.DynamicQuery<RegionAssetModel>(query);
         }
 

@@ -11,10 +11,23 @@
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="2*"/>
         </Grid.ColumnDefinitions>
-        
-        <!-- Region List -->
-        <ListBox ItemsSource="{Binding RegionList.AllRegions}" DisplayMemberPath="RegionName"
-                 SelectedIndex="{Binding RegionList.SelectedIndex, Mode=TwoWay}" />
+
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Region List -->
+            <ListBox ItemsSource="{Binding RegionList.AllRegions}" DisplayMemberPath="RegionName"
+                 SelectedIndex="{Binding RegionList.SelectedIndex, Mode=TwoWay}" Grid.Row="0"/>
+
+            <DockPanel Grid.Row="1" Margin="0 5">
+                <TextBlock Text="Filter: "/>
+                <TextBox Text="{Binding RegionList.RegionFilter}"/>
+            </DockPanel>
+        </Grid>
+
 
         <!-- Asset Hierarchy -->
         <TreeView Grid.Column="1" ItemsSource="{Binding AssetHierarchy.Level1Nodes}">
